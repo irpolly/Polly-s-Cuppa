@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Super Corgi Bros</title>
+<style>
+  body { margin:0; background:#5C94FC; overflow:hidden; font-family:sans-serif; }
+  canvas { display:block; margin:0 auto; image-rendering:pixelated; }
+  #container { position:relative; }
+  #game { background:#5C94FC; }
+  #start-screen, #game-over {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.8); color:white; text-align:center;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    font-size:24px;
+  }
+  button { padding:15px 30px; font-size:20px; margin-top:20px; cursor:pointer; }
+  h1 { font-size:50px; margin:0; color:#FFCC00; text-shadow:3px 3px #000; }
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="game" width="800" height="400"></canvas>
+  
+  <div id="start-screen">
+    <h1>SUPER CORGI BROS</h1>
+    <p>Help the corgi collect tennis balls!<br>
+       ← → Move • Space/↑ Jump • Eat sausages to grow • Grab steaks for invincibility!</p>
+    <button onclick="startGame()">PLAY</button>
+  </div>
+  
+  <div id="game-over" style="display:none">
+    <h1>GAME OVER</h1>
+    <p id="final-score"></p>
+    <button onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script>
+// =============== SUPER CORGI BROS =================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 400;
+
+let score = 0;
+let lives = 3;
+let gameRunning = false;
+
+const gravity = 0.6;
+const jumpPower = -13;
+const moveSpeed = 5;
+
+class Player {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = 100;
+    this.y = 200;
+    this.width = 40;
+    this.height = 40;
+    this.vx = 0;
+    this.vy = 0;
+    this.onGround = false;
+    this.big = false;        // after eating sausage
+    this.invincible = false;
+    this.invincibleTimer = 0;
+  }
+  update() {
+    if (!gameRunning) return;
+    
+    // Input
+    if (keys.ArrowLeft || keys.KeyA) this.vx = -moveSpeed;
+    else if (keys.ArrowRight || keys.KeyD) this.vx = moveSpeed;
+    else this.vx = 0;
+    
+    if ((keys.Space || keys.ArrowUp || keys.KeyW) && this.onGround) {
+      this.vy = jumpPower;
+      this.onGround = false;
+    }
+    
+    // Physics
+    this.vy += gravity;
+    this.x += this.vx;
+    this.y += this.vy;
+    
+    // Floor & ceiling
+    if (this.y > canvas.height - 80) {
+      this.y = canvas.height - 80;
+      this.vy = 0;
+      this.onGround = true;
+    }
+    if (this.y < 0) { this.y = 0; this.vy = 0; }
+    
+    // World bounds
+    if (this.x < 0) this.x = 0;
+    if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+    
+    // Invincibility timer
+    if (this.invincible) {
+      this.invincibleTimer--;
+      if (this.invincibleTimer <= 0) this.invincible = false;
+    }
+  }
+  draw() {
+    ctx.save();
+    if (this.invincible && Date.now() % 200 < 100) ctx.globalAlpha = 0.5;
+    
+    // Corgi body
+    ctx.fillStyle = '#FF9966';
+    ctx.fillRect(this.x + 8, this.y + 10, 24, 20); // body
+    
+    // Head
+    ctx.fillStyle = '#FFCC99';
+    ctx.beginPath();
+    ctx.arc(this.x + 30, this.y + 18, 12, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Ears
+    ctx.fillStyle = '#CC6666';
+    ctx.beginPath();
+    ctx.moveTo(this.x + 24, this.y + 8);
+    ctx.lineTo(this.x + 28, this.y + 2);
+    ctx.lineTo(this.x + 34, this.y + 10);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.x + 36, this.y + 8);
+    ctx.lineTo(this.x + 32, this.y + 2);
+    ctx.lineTo(this.x + 26, this.y + 10);
+    ctx.fill();
+    
+    // Legs (running animation)
+    let legPhase = Date.now() / 100;
+    let leg1 = Math.sin(legPhase)*3;
+    let leg2 = Math.sin(legPhase + Math.PI)*3;
+    ctx.fillStyle = '#FF9966';
+    ctx.fillRect(this.x + 12, this.y + 28 + leg1, 6, 10);
+    ctx.fillRect(this.x + 22, this.y + 28 + leg2, 6, 10);
+    
+    // Tail (wagging!)
+    ctx.strokeStyle = '#FF9966';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(this.x + 8, this.y + 20);
+    ctx.quadraticCurveTo(this.x - 10, this.y + 15, this.x - 5, this.y + 25 + Math.sin(Date.now()/100)*5);
+    ctx.stroke();
+    
+    if (this.big) {
+      ctx.font = "bold 14px Arial";
+      ctx.fillStyle = "red";
+      ctx.fillText("BIG", this.x + 5, this.y - 5);
+    }
+    
+    ctx.restore();
+  }
+}
+
+class TennisBall {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.collected = false;
+  }
+  draw() {
+    if (this.collected) return;
+    ctx.fillStyle = '#CCFF00';
+    ctx.beginPath();
+    ctx.arc(this.x + 15, this.y + 15, 12, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#99CC00';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(this.x + 15, this.y + 15, 12, 0, Math.PI);
+    ctx.moveTo(this.x + 3, this.y + 15);
+    ctx.arc(this.x + 15, this.y + 15, 12, Math.PI, Math.PI*2);
+    ctx.stroke();
+  }
+}
+
+class Sausage {
+  constructor(x, y) { this.x = x; this.y = y; this.collected = false; }
+  draw() {
+    if (this.collected) return;
+    ctx.fillStyle = '#CC4444';
+    ctx.fillRect(this.x + 5, this.y + 10, 30, 15);
+    ctx.fillStyle = '#FF6666';
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(this.x + 8 + i*6, this.y + 8, 4, 19);
+    }
+  }
+}
+
+class Steak {
+  constructor(x, y) { this.x = x; this.y = y; this.collected = false; }
+  draw() {
+    if (this.collected) return;
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath();
+    ctx.moveTo(this.x + 5, this.y + 10);
+    ctx.lineTo(this.x + 35, this.y + 5);
+    ctx.lineTo(this.x + 40, this.y + 25);
+    ctx.lineTo(this.x + 10, this.y + 30);
+    ctx.closePath();
+    ctx.fill();
+    // Grill marks
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(this.x + 10 + i*10, this.y + 8);
+      ctx.lineTo(this.x + 15 + i*10, this.y + 28);
+      ctx.stroke();
+    }
+  }
+}
+
+class Cat {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.vx = -1.5 + Math.random()*1;
+    this.width = 35; this.height = 35;
+  }
+  update() {
+    this.x += this.vx;
+    if (this.x < -50 || this.x > canvas.width + 50) this.vx *= -1;
+  }
+  draw() {
+    // Simple evil cat
+    ctx.fillStyle = '#444444';
+    ctx.fillRect(this.x + 8, this.y + 12, 20, 18); // body
+    ctx.fillStyle = '#666666';
+    ctx.beginPath(); // head
+    ctx.arc(this.x + 25, this.y + 18, 10, 0, Math.PI*2);
+    ctx.fill();
+    // ears
+    ctx.fillStyle = '#333333';
+    ctx.beginPath();
+    ctx.moveTo(this.x + 20, this.y + 10);
+    ctx.lineTo(this.x + 23, this.y + 5);
+    ctx.lineTo(this.x + 26, this.y + 10);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(this.x + 30, this.y + 10);
+    ctx.lineTo(this.x + 27, this.y + 5);
+    ctx.lineTo(this.x + 24, this.y + 10);
+    ctx.fill();
+    // evil eyes
+    ctx.fillStyle = 'red';
+    ctx.fillRect(this.x + 21, this.y + 16, 3, 5);
+    ctx.fillRect(this.x + 27, this.y + 16, 3, 5);
+  }
+}
+
+class Squirrel {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.vx = -2 + Math.random()*2;
+    this.width = 30; this.height = 30;
+  }
+  update() {
+    this.x += this.vx;
+    if (this.x < -50 || this.x > canvas.width + 50) this.vx *= -1;
+  }
+  draw() {
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(this.x + 5, this.y + 12, 20, 15);
+    ctx.beginPath();
+    ctx.arc(this.x + 20, this.y + 15, 10, 0, Math.PI*2);
+    ctx.fill();
+    // big fluffy tail
+    ctx.fillStyle = '#A0522D';
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y + 10, 18, 25, -0.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// Game objects
+const player = new Player();
+const platforms = [
+  {x:0, y:320, w:300, h:80},
+  {x:350, y:280, w:200, h:20},
+  {x:600, y:240, w:200, h:20},
+  {x:200, y:180, w:150, h:20},
+  {x:500, y:140, w:250, h:20},
+  {x:0, y:canvas.height-40, w:canvas.width, h:40} // ground
+];
+
+let tennisBalls = [];
+let sausages = [];
+let steaks = [];
+let enemies = [];
+
+// Level generation
+function generateLevel() {
+  tennisBalls = [
+    new TennisBall(400, 240),
+    new TennisBall(150, 280),
+    new TennisBall(650, 200),
+    new TennisBall(300, 140),
+    new TennisBall(600, 100),
+    new TennisBall(100, 100),
+  ];
+  sausages = [
+    new Sausage(380, 230),
+    new Sausage(220, 130),
+  ];
+  steaks = [
+    new Steak(700, 190),
+  ];
+  enemies = [
+    new Cat(400, 280),
+    new Cat(700, 200),
+    new Squirrel(500, 200),
+    new Squirrel(200, 140),
+  ];
+}
+
+function collides(a, b) {
+  return a.x < b.x + b.width &&
+         a.x + a.width > b.x &&
+         a.y < b.y + b.height &&
+         a.y + a.height > b.y;
+}
+
+function platformCollision() {
+  player.onGround = false;
+  for (let p of platforms) {
+    if (player.vy > 0 && 
+        player.y < p.y && 
+        player.y + player.height > p.y &&
+        player.x + player.width > p.x && 
+        player.x < p.x + p.w) {
+      player.y = p.y - player.height;
+      player.vy = 0;
+      player.onGround = true;
+    }
+  }
+}
+
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  score = 0;
+  lives = 3;
+  player.reset();
+  generateLevel();
+  gameRunning = true;
+  requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  gameRunning = false;
+  document.getElementById('final-score').textContent = `Tennis balls collected: ${score} | Final score: ${score * 100}`;
+  document.getElementById('game-over').style.display = 'flex';
+}
+
+function loop() {
+  if (!gameRunning) return;
+  
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  
+  // Sky gradient
+  let grad = ctx.createLinearGradient(0,0,0,canvas.height);
+  grad.addColorStop(0, '#87CEEB');
+  grad.addColorStop(1, '#E0F7FA');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  
+  // Platforms (grass style)
+  for (let p of platforms) {
+    ctx.fillStyle = '#228B22';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#32CD32';
+    ctx.fillRect(p.x, p.y, p.w, 10);
+  }
+  
+  player.update();
+  platformCollision();
+  player.draw();
+  
+  // Collectibles & power-ups
+  for (let ball of tennisBalls) {
+    ball.draw();
+    if (!ball.collected && collides(player, {x:ball.x, y:ball.y, width:30, height:30})) {
+      ball.collected = true;
+      score++;
+    }
+  }
+  for (let s of sausages) {
+    s.draw();
+    if (!s.collected && collides(player, {x:s.x, y:s.y, width:40, height:40})) {
+      s.collected = true;
+      player.big = true;
+      player.height = 60;
+    }
+  }
+  for (let st of steaks) {
+    st.draw();
+    if (!st.collected && collides(player, {x:st.x, y:st.y, width:50, height:40})) {
+      st.collected = true;
+      player.invincible = true;
+      player.invincibleTimer = 600; // ~10 seconds
+    }
+  }
+  
+  // Enemies
+  for (let e of enemies) {
+    e.update();
+    e.draw();
+    let enemyBox = {x:e.x, y:e.y, width:e.width, height:e.height};
+    if (collides(player, enemyBox)) {
+      if (player.invincible) {
+        // Destroy enemy
+        e.x = -999;
+      } else {
+        // Player hit
+        lives--;
+        if (lives <= 0) gameOver();
+        else {
+          player.big = false;
+          player.height = 40;
+          player.x = 100; // respawn
+        }
+      }
+    }
+  }
+  
+  // HUD
+  ctx.fillStyle = 'white';
+  ctx.font = '24px Arial';
+  ctx.fillText(`Tennis Balls: ${score}    Lives: ${'❤️'.repeat(lives)}`, 20, 40);
+  if (player.invincible) {
+    ctx.fillStyle = 'gold';
+    ctx.fillText('INVINCIBLE!', 320, 40);
+  }
+  
+  requestAnimationFrame(loop);
+}
+
+// Initial screen is already shown
+</script>
+</body>
+</html>

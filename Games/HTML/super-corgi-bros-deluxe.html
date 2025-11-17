@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Super Corgi Bros – Deluxe Edition</title>
+<style>
+  body { margin:0; background:#87CEEB; overflow:hidden; font-family:"Comic Sans MS", cursive; }
+  canvas { display:block; margin:0 auto; image-rendering:pixelated; transform:scale(1); }
+  #container { position:relative; }
+  #start-screen, #game-over {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.85); color:white; text-align:center;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    font-size:28px; z-index:10;
+  }
+  button { padding:20px 40px; font-size:28px; margin-top:30px; cursor:pointer; border-radius:15px; background:#FFCC00; border:none; box-shadow:0 5px #996600; }
+  button:active { transform:translateY(4px); box-shadow:0 1px #996600; }
+  h1 { font-size:70px; margin:0; background:-webkit-linear-gradient(#FF9966, #FFCC00); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-shadow:4px 4px #663300; }
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="game" width="800" height="400"></canvas>
+  
+  <div id="start-screen">
+    <h1>SUPER CORGI BROS</h1>
+    <p>DELUXE EDITION</p>
+    <p>← → Move • SPACE / ↑ Jump<br>Collect tennis balls • Eat sausages • Grab steaks!</p>
+    <button onclick="startGame()">PLAY NOW!</button>
+  </div>
+  
+  <div id="game-over" style="display:none">
+    <h1>GAME OVER</h1>
+    <p id="final-score" style="font-size:40px;"></p>
+    <button onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script>
+// =============== SUPER CORGI BROS DELUXE =================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 800; canvas.height = 400;
+
+let score = 0, lives = 3, gameRunning = false;
+let cameraX = 0, shake = 0;
+const particles = [];
+
+// === CORGI SPRITE FRAMES (hand-drawn with canvas!) ===
+const corgiFrames = {
+  idle: [{leg1:0,leg2:0,tail:0,bodyY:0}],
+  run: [
+    {leg1:-6,leg2:4,tail:-10,bodyY:-2},
+    {leg1:2,leg2:-6,tail:10,bodyY:0},
+    {leg1:6,leg2:-4,tail:-8,bodyY:-1},
+    {leg1:-4,leg2:6,tail:12,bodyY:0}
+  ],
+  jump: {leg1:8,leg2:8,tail:20,bodyY:-5}
+};
+
+class Player {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = 100; this.y = 200;
+    this.width = 48; this.height = 48;
+    this.vx = 0; this.vy = 0;
+    this.onGround = false;
+    this.big = false; this.invincible = false; this.invincibleTimer = 0;
+    this.frame = 0; this.facing = 1;
+  }
+  update() {
+    if (!gameRunning) return;
+
+    // Input
+    const left = keys.ArrowLeft || keys.KeyA;
+    const right = keys.ArrowRight || keys.KeyD;
+    this.facing = right ? 1 : left ? -1 : this.facing;
+    
+    if (left) this.vx = -6;
+    else if (right) this.vx = 6;
+    else this.vx *= 0.8;
+
+    if ((keys.Space || keys.ArrowUp || keys.KeyW) && this.onGround) {
+      this.vy = -14;
+      this.onGround = false;
+      createParticles(this.x + 24, this.y + 48, 12, "#FFCC66");
+    }
+
+    this.vy += 0.6;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Animation
+    if (!this.onGround) this.frame = 0;
+    else if (Math.abs(this.vx) > 1) this.frame = (Date.now() / 80) % 4;
+    else this.frame = 0;
+
+    if (this.invincible) this.invincibleTimer--;
+    if (this.invincibleTimer <= 0) this.invincible = false;
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x + 24 - cameraX, this.y + 24);
+
+    if (this.invincible && Date.now() % 120 < 60) ctx.globalAlpha = 0.6;
+
+    const anim = this.onGround ? (Math.abs(this.vx)>1 ? corgiFrames.run[Math.floor(this.frame)] : corgiFrames.idle[0]) : corgiFrames.jump;
+    if (!this.facing) this.facing = 1;
+    ctx.scale(this.facing, 1);
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.ellipse(0, 20, 28, 8, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = "#FFB347";
+    ctx.fillRect(-18, -10 + anim.bodyY, 36, 24);
+
+    // Belly
+    ctx.fillStyle = "#FFCC99";
+    ctx.fillRect(-14, -4 + anim.bodyY, 28, 16);
+
+    // Head
+    ctx.fillStyle = "#FFB347";
+    ctx.beginPath();
+    ctx.arc(18, -2, 15, 0, Math.PI*2);
+    ctx.fill();
+
+    // Snout
+    ctx.fillStyle = "#FFCC99";
+    ctx.beginPath();
+    ctx.arc(26, 0, 8, 0, Math.PI*2);
+    ctx.fill();
+
+    // Nose
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(30, 0, 4, 0, Math.PI*2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(18, -5, 3.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#FFF";
+    ctx.beginPath();
+    ctx.arc(19, -6, 1.5, 0, Math.PI*2);
+    ctx.fill();
+
+    // Ears (floppy!)
+    ctx.fillStyle = "#CC6633";
+    ctx.beginPath();
+    ctx.moveTo(12, -12);
+    ctx.quadraticCurveTo(5, -22, 8, -10);
+    ctx.quadraticCurveTo(15, -15, 12, -12);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(24, -12);
+    ctx.quadraticCurveTo(31, -22, 28, -10);
+    ctx.quadraticCurveTo(21, -15, 24, -12);
+    ctx.fill();
+
+    // Legs
+    ctx.fillStyle = "#FFB347";
+    ctx.fillRect(-12, 10 + anim.leg1, 10, 16);
+    ctx.fillRect(2, 10 + anim.leg2, 10, 16);
+
+    // Paws
+    ctx.fillStyle = "#FF9966";
+    ctx.fillRect(-12, 24 + anim.leg1, 10, 6);
+    ctx.fillRect(2, 24 + anim.leg2, 10, 6);
+
+    // Tail (wagging!)
+    ctx.strokeStyle = "#FFB347";
+    ctx.lineWidth = 12;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-18, 0);
+    ctx.quadraticCurveTo(-35, -10 + anim.tail, -30, 15 + Math.sin(Date.now()/100)*5);
+    ctx.stroke();
+
+    if (this.big) {
+      ctx.font = "bold 18px Arial";
+      ctx.fillStyle = "#FF0000";
+      ctx.fillText("BIG", -20, -30);
+    }
+
+    ctx.restore();
+  }
+}
+
+// === PARTICLES ===
+function createParticles(x, y, count, color) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: Math.random()*10-5,
+      vy: Math.random()*10-8,
+      life: 30,
+      color
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length-1; i >= 0; i--) {
+    let p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.3;
+    p.life--;
+    if (p.life <= 0) particles.splice(i,1);
+  }
+}
+
+function drawParticles() {
+  for (let p of particles) {
+    ctx.globalAlpha = p.life/30;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - cameraX, p.y, 8, 8);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// === COLLECTIBLES WITH BOBBING ANIMATION ===
+class TennisBall {
+  constructor(x,y) { this.x=x; this.y=y; this.collected=false; }
+  draw() {
+    if (this.collected) return;
+    const bob = Math.sin(Date.now()/200)*5;
+    ctx.save();
+    ctx.translate(this.x+20 - cameraX, this.y+20 + bob);
+    ctx.fillStyle = "#FFFF33";
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#CCAA00"; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(0,0,16,0.2,0.8*Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,0,16,1.2*Math.PI,1.8*Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class Sausage {
+  constructor(x,y) { this.x=x; this.y=y; this.collected=false; }
+  draw() {
+    if (this.collected) return;
+    const bob = Math.sin(Date.now()/200)*5;
+    ctx.save();
+    ctx.translate(this.x+25 - cameraX, this.y+20 + bob);
+    ctx.rotate(Date.now()/1000);
+    ctx.fillStyle="#8B4513";
+    ctx.fillRect(-25,-10,50,20);
+    ctx.fillStyle="#D2691E";
+    for(let i=-20;i<30;i+=10) {
+      ctx.fillRect(i-3,-12,6,24);
+    }
+    ctx.restore();
+  }
+}
+
+class Steak {
+  constructor(x,y) { this.x=x; this.y=y; this.collected=false; }
+  draw() {
+    if (this.collected) return;
+    const bob = Math.sin(Date.now()/150)*6;
+    ctx.save();
+    ctx.translate(this.x+30 - cameraX, this.y+25 + bob);
+    ctx.rotate(Math.sin(Date.now()/300)*0.1);
+    ctx.fillStyle="#8B4513";
+    ctx.beginPath();
+    ctx.moveTo(-25,-15); ctx.lineTo(25,-10); ctx.lineTo(20,15); ctx.lineTo(-20,10);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle="#654321"; ctx.lineWidth=4;
+    for(let i=-15;i<20;i+=12){
+      ctx.beginPath(); ctx.moveTo(i,-15); ctx.lineTo(i+10,10); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// Enemies with better animations
+class Cat {
+  constructor(x,y) { this.x=x; this.y=y; this.vx=-1.8-Math.random(); this.frame=0; }
+  update() { this.x += this.vx; this.frame += 0.15; }
+  draw() {
+    const bob = Math.sin(this.frame*10)*3;
+    ctx.save();
+    ctx.translate(this.x+25 - cameraX, this.y+25 + bob);
+    ctx.scale(this.vx>0?1:-1,1);
+    // Body
+    ctx.fillStyle="#333333"; ctx.fillRect(-20,-12,40,24);
+    // Head
+    ctx.fillStyle="#444444";
+    ctx.beginPath(); ctx.arc(22,-2,14,0,Math.PI*2); ctx.fill();
+    // Ears
+    ctx.fillStyle="#222222";
+    ctx.beginPath(); ctx.moveTo(15,-14); ctx.lineTo(20,-22); ctx.lineTo(25,-14); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(30,-14); ctx.lineTo(25,-22); ctx.lineTo(20,-14); ctx.fill();
+    // Evil eyes
+    ctx.fillStyle="#FF0000";
+    ctx.fillRect(17,-5,5,8); ctx.fillRect(27,-5,5,8);
+    // Tail whip
+    ctx.strokeStyle="#333"; ctx.lineWidth=8;
+    ctx.beginPath(); ctx.moveTo(-20,0);
+    ctx.quadraticCurveTo(-40, -20+Math.sin(this.frame*5)*10, -35,10);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class Squirrel {
+  constructor(x,y) { this.x=x; this.y=y; this.vx=-2.2-Math.random()*0.8; this.frame=0; }
+  update() { this.x += this.vx; this.frame += 0.2; }
+  draw() {
+    const bounce = Math.abs(Math.sin(this.frame*15))*4;
+    ctx.save();
+    ctx.translate(this.x+25 - cameraX, this.y+25 + bounce);
+    ctx.scale(this.vx>0?1:-1,1);
+    // Body
+    ctx.fillStyle="#8B4513"; ctx.fillRect(-15,-10,30,20);
+    // Head
+    ctx.beginPath(); ctx.arc(18,-2,12,0,Math.PI*2); ctx.fill();
+    // Fluffy tail
+    ctx.fillStyle="#D2691E";
+    ctx.beginPath(); ctx.ellipse(-25,0,20,35,0.6,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// === LEVEL DATA ===
+const platforms = [
+  {x:0,y:340,w:400,h:60},
+  {x:380,y:300,w:200,h:20},
+  {x:620,y:260,w:250,h:20},
+  {x:180,y:200,w:180,h:20},
+  {x:500,y:140,w:300,h:20},
+  {x:0,y:360,w:canvas.width,h:40}
+];
+
+let tennisBalls = [], sausages = [], steaks = [], enemies = [];
+
+function generateLevel() {
+  tennisBalls = [150,280,400,250,650,220,300,160,100,100,600,80].map((v,i,a)=>new TennisBall(i%2?a[i+1]:v,i%2?v:a[i+1]));
+  sausages = [new Sausage(400,270), new Sausage(220,160)];
+  steaks = [new Steak(720,210)];
+  enemies = [new Cat(450,300), new Cat(750,220), new Squirrel(550,220), new Squirrel(200,160)];
+}
+
+function collides(a,b,w=48,h=48) {
+  return a.x < b.x + (b.width||w) && a.x + a.width > b.x &&
+         a.y < b.y + (b.height||h) && a.y + a.height > b.y;
+}
+
+function platformCheck() {
+  player.onGround = false;
+  for (let p of platforms) {
+    if (player.vy > 0 && player.y < p.y && player.y + player.height > p.y + 5 &&
+        player.x + player.width > p.x && player.x < p.x + p.w) {
+      player.y = p.y - player.height;
+      player.vy = 0;
+      player.onGround = true;
+    }
+  }
+}
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e=>{keys[e.code]=true; if(e.code==="Space") e.preventDefault();});
+window.addEventListener('keyup', e=>keys[e.code]=false);
+
+function startGame() {
+  document.getElementById('start-screen').style.display='none';
+  score=0; lives=3; player.reset(); generateLevel(); gameRunning=true;
+  requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  gameRunning = false;
+  document.getElementById('final-score').innerHTML = `Tennis balls collected: <b>${score}</b><br>Final score: <b>${score*100}</b> points!`;
+  document.getElementById('game-over').style.display='flex';
+}
+
+const player = new Player();
+
+function loop() {
+  if (!gameRunning) return;
+
+  // Camera follow
+  cameraX += (player.x - cameraX - 300) * 0.05;
+  shake *= 0.9;
+
+  ctx.save();
+  ctx.translate(shake * (Math.random() > 0.5 ? 1 : -1), shake * (Math.random() > 0.5 ? 1 : -1));
+
+  // Parallax background
+  ctx.fillStyle = "#87CEEB";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  // Clouds
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  for(let i=0;i<6;i++){
+    const cloudX = (i*200 - cameraX*0.2) % (canvas.width+200);
+    ctx.beginPath();
+    ctx.arc(cloudX, 60, 30,0,Math.PI*2);
+    ctx.arc(cloudX+25, 55, 35,0,Math.PI*2);
+    ctx.arc(cloudX+50, 60, 30,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // Ground grass
+  for (let p of platforms) {
+    ctx.fillStyle = "#228B22";
+    ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+    ctx.fillStyle = "#32CD32";
+    ctx.fillRect(p.x - cameraX, p.y, p.w, 12);
+  }
+
+  player.update();
+  platformCheck();
+
+  // Update & draw everything
+  updateParticles();
+  for(let e of enemies) { e.update(); e.draw(); }
+  for(let item of [...tennisBalls, ...sausages, ...steaks]) item.draw();
+  player.draw();
+  drawParticles();
+
+  // Collision checks
+  for(let ball of tennisBalls){
+    if(!ball.collected && collides(player,{x:ball.x,y:ball.y},40,40)){
+      ball.collected=true; score++;
+      createParticles(ball.x+20, ball.y+20, 15, "#FFFF66");
+      // Floating score
+      particles.push({x:ball.x+20, y:ball.y, vx:0, vy:-2, life:60, text:"+100", color:"#FFFF00"});
+    }
+  }
+  for(let s of sausages){
+    if(!s.collected && collides(player,{x:s.x,y:s.y},50,40)){
+      s.collected=true; player.big=true; player.height=64;
+      createParticles(s.x+25,s.y+20,20,"#FF6633");
+      shake=15;
+    }
+  }
+  for(let st of steaks){
+    if(!st.collected && collides(player,{x:st.x,y:st.y},60,50)){
+      st.collected=true; player.invincible=true; player.invincibleTimer=600;
+      createParticles(st.x+30,st.y+25,30,"#FFD700");
+      shake=20;
+    }
+  }
+
+  for(let e of enemies){
+    if(collides(player,{x:e.x,y:e.y,width:50,height:50})){
+      if(player.invincible){
+        e.x = -9999;
+        createParticles(e.x+25,e.y+25,25,"#FF0000");
+        score += 5;
+      } else {
+        lives--;
+        createParticles(player.x+24,player.y+24,20,"#FFFFFF");
+        shake=25;
+        if(lives<=0) gameOver();
+        else { player.big=false; player.height=48; player.x=100; }
+      }
+    }
+  }
+
+  // Floating text particles
+  for(let i=particles.length-1;i>=0;i--){
+    let p=particles[i];
+    if(p.text){
+      ctx.font="bold 24px Arial";
+      ctx.fillStyle=p.color;
+      ctx.fillText(p.text, p.x-cameraX, p.y);
+      p.y += p.vy;
+      p.life--;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+
+  // HUD
+  ctx.fillStyle="#FFFFFF";
+  ctx.font="28px 'Comic Sans MS'";
+  ctx.fillText(`Tennis Balls: ${score}  ×  🎾`, 20, 50);
+  ctx.fillText(`Lives: ${'❤️ '.repeat(lives)}`, 20, 90);
+  if(player.invincible){
+    ctx.fillStyle="#FFD700";
+    ctx.fillText("★ INVINCIBLE ★", 250, 60);
+  }
+
+  ctx.restore();
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
+>
