@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fireworks Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the full-screen canvas and dark background */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Hide scrollbars */
+            font-family: 'Inter', sans-serif;
+        }
+        #fireworksCanvas {
+            display: block;
+            background-color: #00000a; /* Very dark blue/black for night sky */
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #uiOverlay {
+            position: absolute;
+            top: 1rem;
+            width: 100%;
+            text-align: center;
+            pointer-events: none; /* Allows clicks to pass through to the canvas */
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+
+    <canvas id="fireworksCanvas"></canvas>
+
+    <div id="uiOverlay" class="text-white">
+        <h1 class="text-4xl font-extrabold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-red-500">
+            Click-Fireworks
+        </h1>
+        <p class="text-sm md:text-base text-gray-300 font-medium">Click or tap anywhere to launch fireworks!</p>
+    </div>
+
+    <script>
+        // Get the canvas element and its 2D context
+        const canvas = document.getElementById('fireworksCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Global state for fireworks and particles
+        let fireworks = [];
+        let particles = [];
+        const GRAVITY = 0.05; // Gravity effect on particles
+
+
+        function randomColor() {
+            // Random hue (0-360), fixed saturation (70-90) and lightness (50-60) for vibrant colors
+            const hue = Math.floor(Math.random() * 360);
+            const sat = Math.floor(Math.random() * 20) + 70;
+            const light = Math.floor(Math.random() * 10) + 50;
+            return `hsl(${hue}, ${sat}%, ${light}%)`;
+        }
+
+        class Particle {
+            constructor(x, y, color, angle, speed) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = Math.random() * 2 + 1;
+
+                // Velocity based on angle and speed
+                this.velocity = {
+                    x: Math.cos(angle) * speed,
+                    y: Math.sin(angle) * speed
+                };
+
+                this.alpha = 1; // Initial opacity
+                this.friction = 0.99; // Air resistance
+                this.timeToLive = 100; // How long it stays visible (frames)
+            }
+
+            // Draw the particle
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Update position and alpha
+            update() {
+                // Apply friction to slow down horizontal movement
+                this.velocity.x *= this.friction;
+                // Apply gravity to vertical movement
+                this.velocity.y += GRAVITY;
+
+                // Update position
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+
+                // Fade out (decrease alpha)
+                this.alpha -= 0.015;
+                this.timeToLive--;
+            }
+        }
+
+        class Firework {
+            constructor(startX, startY, endX, endY) {
+                this.x = startX;
+                this.y = startY;
+                this.targetX = endX;
+                this.targetY = endY;
+                this.color = randomColor();
+                this.speed = Math.random() * 3 + 2; // Speed of the rocket
+                this.exploded = false;
+                this.trail = [{ x: startX, y: startY }]; // For the trail effect
+
+                // Calculate the distance and velocity needed to reach the target
+                const dx = endX - startX;
+                const dy = endY - startY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Normalize velocity
+                this.velocity = {
+                    x: (dx / distance) * this.speed,
+                    y: (dy / distance) * this.speed
+                };
+            }
+
+            // Launch the particle explosion
+            explode() {
+                const count = Math.floor(Math.random() * 50) + 80; // 80 to 130 particles
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2; // Full 360 degrees
+                    const speed = Math.random() * 4 + 1; // Explosion speed
+
+                    // Use the firework's color for the particles
+                    particles.push(new Particle(this.x, this.y, this.color, angle, speed));
+                }
+                this.exploded = true;
+            }
+
+            // Draw the rocket (a simple dot) and its trail
+            draw() {
+                // Draw rocket body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2, false);
+                ctx.fill();
+
+                // Draw trail (simple line behind the rocket)
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                // Start from the current rocket position
+                ctx.moveTo(this.x, this.y);
+                // Draw back through the last few trail points
+                for (let i = 0; i < Math.min(this.trail.length, 5); i++) {
+                    ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                }
+                ctx.stroke();
+            }
+
+            // Update rocket position
+            update() {
+                if (!this.exploded) {
+                    // Update position
+                    this.x += this.velocity.x;
+                    this.y += this.velocity.y;
+
+                    // Add current position to trail
+                    this.trail.unshift({ x: this.x, y: this.y });
+                    // Keep trail short
+                    if (this.trail.length > 5) {
+                        this.trail.pop();
+                    }
+
+                    // Check if it has passed the target point (peak height)
+                    // Note: Since fireworks launch upwards (y decreases), we check if current y is less than or equal to target y.
+                    if (this.velocity.y < 0 && this.y <= this.targetY) {
+                        this.explode();
+                    } else if (this.velocity.y > 0 && this.y >= this.targetY) {
+                        this.explode();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Darken the canvas slightly on each frame to create the "trail" effect
+            ctx.fillStyle = 'rgba(0, 0, 10, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw fireworks (rockets)
+            for (let i = fireworks.length - 1; i >= 0; i--) {
+                const fw = fireworks[i];
+                fw.update();
+                fw.draw();
+
+                // Remove the firework once it has exploded
+                if (fw.exploded) {
+                    fireworks.splice(i, 1);
+                }
+            }
+
+            // Update and draw particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+
+                // Remove particles that have faded out or exceeded their time to live
+                if (p.alpha <= 0 || p.timeToLive <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function setupCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        // Initialize canvas size on load
+        setupCanvas();
+
+        // Adjust canvas size on window resize
+        window.addEventListener('resize', setupCanvas);
+
+        function launchFirework(event) {
+            const clientX = event.clientX || event.touches[0].clientX;
+            const clientY = event.clientY || event.touches[0].clientY;
+
+            const startX = canvas.width / 2; // Always launch from the bottom center
+            const startY = canvas.height;
+
+            // Set the explosion target point (where the user clicked/tapped)
+            const endX = clientX;
+            const endY = clientY;
+
+            // Only launch if the target is in the upper 80% of the screen
+            if (endY < canvas.height * 0.9) {
+                fireworks.push(new Firework(startX, startY, endX, endY));
+            }
+        }
+
+        // Add event listeners for both mouse and touch
+        canvas.addEventListener('mousedown', launchFirework);
+        canvas.addEventListener('touchstart', launchFirework);
+
+        // Start the animation loop
+        window.onload = function() {
+            animate();
+        };
+
+    </script>
+</body>
+</html>
