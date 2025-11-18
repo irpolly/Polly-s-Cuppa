@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Corgi Bro's 0.3 </title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --corgi-body-color: #f7d188; /* Corgi fur */
+            --corgi-white-color: #ffffff; /* Corgi belly/paws */
+            --corgi-outline-color: #a07a3c; /* Darker outline */
+            --platform-top-color: #6db64f; /* Green grass */
+            --platform-side-color: #795548; /* Brown dirt/platform */
+            --sky-color: #87ceeb; /* Light blue sky */
+            --cloud-color: #ffffff;
+            --ball-color: #a8c33c; /* Tennis ball green */
+            --ball-line-color: #ffffff;
+            --kibble-color: #b17e4f; /* Kibble brown */
+            --kibble-shine-color: #e0b68e;
+            --steak-meat-color: #e57373; /* Steak red */
+            --steak-bone-color: #f5f5f5; /* Steak bone */
+            --cat-body-color: #607D8B; /* Grumpy Cat grey */
+            --cat-face-color: #455A64;
+            --text-color: #212121;
+        }
+
+        body {
+            background-color: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Press Start 2P', cursive;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        .game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #34495e;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            border: 8px solid #f39c12;
+        }
+
+        #gameCanvas {
+            border: 4px solid var(--text-color);
+            background-color: var(--sky-color);
+            border-radius: 8px;
+            touch-action: none; /* Prevent browser gestures on canvas */
+        }
+
+        .hud {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            color: white;
+            font-size: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+        }
+
+        .control-button, #startButton {
+            color: #2c3e50;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            border: none;
+            text-align: center;
+            line-height: 1;
+            min-width: 70px;
+        }
+
+        .control-button {
+            background-color: #f39c12;
+            box-shadow: 0 4px 0 #e67e22;
+        }
+
+        .control-button.jump {
+            min-width: 100px;
+        }
+
+        .control-button.bite {
+            background-color: #2ecc71; /* Green for attack */
+            box-shadow: 0 4px 0 #27ae60;
+        }
+
+        .control-button:active, #startButton:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0 #e67e22; /* Use specific shadow for consistency */
+        }
+        .control-button.bite:active {
+            box-shadow: 0 0px 0 #27ae60;
+        }
+
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(44, 62, 80, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            z-index: 10;
+            color: white;
+            text-align: center;
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        .overlay h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #f39c12;
+        }
+        .overlay p {
+            font-size: 10px;
+            margin-bottom: 30px;
+        }
+
+        #startButton {
+            background-color: #f39c12;
+            box-shadow: 0 4px 0 #e67e22;
+            font-size: 20px;
+            padding: 15px 30px;
+            min-width: 150px;
+        }
+
+        @media (max-width: 600px) {
+            .game-container {
+                padding: 10px;
+                width: 95%;
+            }
+            .hud {
+                font-size: 8px;
+            }
+            .controls {
+                gap: 8px;
+            }
+            .control-button {
+                padding: 8px 12px;
+                font-size: 12px;
+                min-width: 60px;
+            }
+            .control-button.jump {
+                min-width: 80px;
+            }
+            .overlay h1 {
+                font-size: 18px;
+            }
+            #startButton {
+                font-size: 16px;
+                padding: 12px 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div id="startOverlay" class="overlay">
+        <h1>Corgi Adventure</h1>
+        <p>Collect Tennis Balls and Steaks while avoiding the Grumpy Cats!</p>
+        <p>Controls: Arrow Keys/WASD to Move. **Z or K** or **BITE** button to Attack.</p>
+        <button id="startButton">Start Game</button>
+    </div>
+
+    <div class="hud">
+        <div id="scoreDisplay">TENNIS BALLS: 0</div>
+        <div id="statusDisplay">STATUS: Little Corgi</div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    
+    <div class="controls">
+        <button id="leftButton" class="control-button">&lt;</button>
+        <button id="jumpButton" class="control-button jump">JUMP</button>
+        <button id="biteButton" class="control-button bite">BITE</button>
+        <button id="rightButton" class="control-button">&gt;</button>
+    </div>
+</div>
+
+<script>
+    // --- Global Setup ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startOverlay = document.getElementById('startOverlay');
+    const startButton = document.getElementById('startButton');
+
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const statusDisplay = document.getElementById('statusDisplay');
+
+    const GRAVITY = 0.5;
+    const GAME_SPEED = 4;
+    const CAMERA_THRESHOLD = canvas.width / 3;
+
+    let gameState = {
+        score: 0,
+        gameRunning: false,
+        worldOffset: 0,
+        keys: {},
+        lastTimestamp: 0,
+        isInvincible: false,
+        invincibilityTimer: 0,
+        kibbleTimer: 0,
+        message: null,
+        messageTimer: 0,
+        timeLimit: 300,
+        timeRemaining: 300,
+        clouds: [],
+        cloudScrollSpeed: 0.5,
+    };
+
+    function startGame() {
+        if (!gameState.gameRunning) {
+            startOverlay.style.display = 'none';
+            init();
+        }
+    }
+
+
+    // --- Utility Functions ---
+
+    /**
+     * Shows a temporary message on the screen.
+     */
+    function showMessage(text, duration = 120) {
+        gameState.message = text;
+        gameState.messageTimer = duration;
+    }
+
+    /**
+     * Simplified AABB collision detection.
+     */
+    function checkCollision(a, b) {
+        return a.x < b.x + b.width &&
+               a.x + a.width > b.x &&
+               a.y < b.y + b.height &&
+               a.y + a.height > b.y;
+    }
+
+    // Helper to get CSS variable value
+    function varToString(cssVar) {
+        return getComputedStyle(document.body).getPropertyValue(cssVar).trim();
+    }
+
+    // --- Game Object Classes ---
+
+    class Corgi {
+        constructor(x, y) {
+            this.initialX = x;
+            this.initialY = y;
+            this.x = x;
+            this.y = y;
+            
+            // Default Little Corgi size constants
+            this.LITTLE_WIDTH = 24;
+            this.LITTLE_HEIGHT = 20; // Adjusted for better proportion with new drawing
+            // Big Corgi size constants
+            this.BIG_WIDTH = 32;
+            this.BIG_HEIGHT = 28; // Adjusted for better proportion with new drawing
+
+            // Default Little Corgi size
+            this.width = this.LITTLE_WIDTH;
+            this.height = this.LITTLE_HEIGHT;
+            
+            this.velY = 0;
+            this.velX = 0;
+            this.onGround = false;
+            this.isBig = false;
+            this.maxJumpVel = -10;
+
+            // New attack properties
+            this.isAttacking = false;
+            this.attackTimer = 0;
+            this.attackDuration = 10; // Frames for the bite
+            this.attackHitbox = null; // Stores the active hitbox for collision
+            this.facingRight = true; // For drawing direction
+        }
+
+        // Resets the Corgi's state for a new game or respawn
+        reset() {
+            this.x = this.initialX;
+            this.y = this.initialY;
+            this.velY = 0;
+            this.velX = 0;
+            this.isBig = false;
+            gameState.isInvincible = false;
+            gameState.invincibilityTimer = 0;
+            gameState.kibbleTimer = 0;
+            // Reset to default size
+            this.height = this.LITTLE_HEIGHT;
+            this.width = this.LITTLE_WIDTH;
+            this.facingRight = true;
+        }
+
+        // Handles the Kibble power-up
+        grow() {
+            if (!this.isBig) {
+                const oldHeight = this.height;
+                
+                // Set new size
+                this.height = this.BIG_HEIGHT;
+                this.width = this.BIG_WIDTH;
+                
+                // Adjust position: Move Corgi up by the height difference to keep feet on the ground.
+                this.y -= (this.height - oldHeight); 
+
+                this.isBig = true;
+                gameState.kibbleTimer = 600;
+            }
+        }
+
+        // Handles the Steak power-up (Invincibility)
+        activateSteak() {
+            gameState.isInvincible = true;
+            gameState.invincibilityTimer = 600;
+        }
+
+        // New bite attack method
+        bite() {
+            if (!this.isAttacking && gameState.gameRunning) {
+                this.isAttacking = true;
+                this.attackTimer = this.attackDuration;
+            }
+        }
+
+        // Handle hit/damage
+        hit() {
+            if (gameState.isInvincible) return;
+
+            if (this.isBig) {
+                // If big, shrink
+                const oldHeight = this.height;
+
+                this.height = this.LITTLE_HEIGHT;
+                this.width = this.LITTLE_WIDTH;
+                
+                // Adjust position: Move Corgi down by the height difference to keep feet on the ground.
+                this.y += (oldHeight - this.height); 
+
+                this.isBig = false;
+                gameState.kibbleTimer = 0;
+                showMessage("OUCH! Back to Little Corgi.");
+            } else {
+                // If small, Game Over
+                gameOver();
+            }
+        }
+
+        update() {
+            // Apply gravity
+            this.velY += GRAVITY;
+            this.y += this.velY;
+            this.onGround = false;
+
+            // Handle horizontal movement based on key state
+            this.velX = 0;
+            if (gameState.keys['ArrowLeft'] || gameState.keys['A']) {
+                this.velX = -GAME_SPEED;
+                this.facingRight = false;
+            }
+            if (gameState.keys['ArrowRight'] || gameState.keys['D']) {
+                this.velX = GAME_SPEED;
+                this.facingRight = true;
+            }
+            this.x += this.velX;
+
+            // Handle Kibble Timer (Big Corgi) - Shrinks when time runs out, regardless of invincibility
+            if (this.isBig) {
+                gameState.kibbleTimer--;
+                if (gameState.kibbleTimer <= 0) {
+                    // Shrink visually
+                    const oldHeight = this.height; 
+                    this.height = this.LITTLE_HEIGHT; 
+                    this.width = this.LITTLE_WIDTH;
+                    this.y += (oldHeight - this.height); 
+                    this.isBig = false;
+                    gameState.kibbleTimer = 0;
+                    showMessage("Little Corgi again!");
+                }
+            }
+
+            // Handle Invincibility Timer (Steak Power)
+            if (gameState.isInvincible) {
+                gameState.invincibilityTimer--;
+                if (gameState.invincibilityTimer <= 0) {
+                    gameState.isInvincible = false;
+                }
+            }
+            
+            // Handle Attack Timer
+            if (this.isAttacking) {
+                this.attackTimer--;
+                if (this.attackTimer <= 0) {
+                    this.isAttacking = false;
+                    this.attackHitbox = null; // Clear hitbox
+                }
+            }
+
+
+            // Camera movement logic
+            if (this.x - gameState.worldOffset > CAMERA_THRESHOLD) {
+                gameState.worldOffset = this.x - CAMERA_THRESHOLD;
+            }
+        }
+
+        jump() {
+            if (this.onGround) {
+                this.velY = this.maxJumpVel;
+                this.onGround = false;
+            }
+        }
+
+        draw() {
+            const displayX = this.x - gameState.worldOffset;
+            const bodyColor = varToString('--corgi-body-color');
+            const whiteColor = varToString('--corgi-white-color');
+            const outlineColor = varToString('--corgi-outline-color');
+
+            // Invincibility flash effect
+            if (gameState.isInvincible && Math.floor(gameState.invincibilityTimer / 10) % 2 === 0) {
+                 ctx.fillStyle = 'yellow';
+                 ctx.fillRect(displayX - 4, this.y - 4, this.width + 8, this.height + 8);
+            }
+
+            ctx.save();
+            if (!this.facingRight) {
+                ctx.scale(-1, 1);
+                ctx.translate(-(displayX + this.width), this.y);
+            } else {
+                ctx.translate(displayX, this.y);
+            }
+
+            // Corgi outline properties
+            ctx.strokeStyle = outlineColor;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            // --- DRAW CORGI BODY ---
+            const bodyW = this.width;
+            const bodyH = this.height;
+
+            // Body
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.roundRect(0, bodyH * 0.4, bodyW * 0.9, bodyH * 0.6, 5); // Main loaf body
+            ctx.fill();
+            ctx.stroke();
+
+            // Head
+            ctx.beginPath();
+            ctx.roundRect(bodyW * 0.7, 0, bodyW * 0.35, bodyH * 0.5, [0, 5, 5, 0]); // Rounded top-right
+            ctx.fill();
+            ctx.stroke();
+
+            // Ears
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            // Left ear
+            ctx.moveTo(bodyW * 0.75, 0);
+            ctx.lineTo(bodyW * 0.85, -bodyH * 0.2);
+            ctx.lineTo(bodyW * 0.95, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Right ear (slightly behind)
+            ctx.beginPath();
+            ctx.moveTo(bodyW * 0.65, 0);
+            ctx.lineTo(bodyW * 0.75, -bodyH * 0.15);
+            ctx.lineTo(bodyW * 0.85, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // White belly/snout/paws
+            ctx.fillStyle = whiteColor;
+            
+            // Belly
+            ctx.beginPath();
+            ctx.roundRect(bodyW * 0.1, bodyH - bodyH * 0.3, bodyW * 0.7, bodyH * 0.3, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            // Snout (more pronounced)
+            ctx.beginPath();
+            ctx.roundRect(bodyW * 0.85, bodyH * 0.2, bodyW * 0.2, bodyH * 0.2, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            // Paws (front and back visible)
+            ctx.fillRect(bodyW * 0.1, bodyH - 4, 6, 4);  // Front paw
+            ctx.fillRect(bodyW * 0.6, bodyH - 4, 6, 4); // Back paw
+            ctx.strokeRect(bodyW * 0.1, bodyH - 4, 6, 4);
+            ctx.strokeRect(bodyW * 0.6, bodyH - 4, 6, 4);
+            
+
+            // Eyes & Nose
+            ctx.fillStyle = '#333'; // Darker for eyes
+            ctx.beginPath();
+            ctx.arc(bodyW * 0.85, bodyH * 0.15, 1.5, 0, Math.PI * 2); // Left eye
+            ctx.fill();
+
+            ctx.beginPath(); // Nose (triangle)
+            ctx.moveTo(bodyW * 0.95, bodyH * 0.28);
+            ctx.lineTo(bodyW * 0.92, bodyH * 0.32);
+            ctx.lineTo(bodyW * 0.98, bodyH * 0.32);
+            ctx.closePath();
+            ctx.fill();
+
+            // Mouth
+            ctx.beginPath();
+            ctx.arc(bodyW * 0.95, bodyH * 0.34, 2, 0, Math.PI); // Smile
+            ctx.stroke();
+
+            // Tail (stubby and wagging implied)
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.moveTo(0, bodyH * 0.6);
+            ctx.lineTo(-5, bodyH * 0.5);
+            ctx.lineTo(0, bodyH * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // --- DRAW BITE ATTACK HITBOX (Visual Indicator) ---
+            if (this.isAttacking) {
+                let attackWidth = this.isBig ? 15 : 10;
+                let attackHeight = this.isBig ? 12 : 8;
+                let attackOffsetX = this.width - 2; // Position at the very front of the head
+                let attackOffsetY = this.isBig ? this.height * 0.2 : this.height * 0.15; // Adjusted Y for snout
+
+                ctx.fillStyle = 'rgba(231, 76, 60, 0.9)'; // Red for bite
+                ctx.fillRect(attackOffsetX, attackOffsetY, attackWidth, attackHeight);
+
+                // Store the attack hitbox for collision calculation (relative to world, not transformed canvas)
+                this.attackHitbox = {
+                    x: this.facingRight ? this.x + attackOffsetX : this.x + this.width - attackOffsetX - attackWidth,
+                    y: this.y + attackOffsetY,
+                    width: attackWidth,
+                    height: attackHeight
+                };
+            } else {
+                this.attackHitbox = null;
+            }
+            
+            ctx.restore(); // Restore the canvas state
+            ctx.lineWidth = 1; // Reset line width for other elements
+        }
+    }
+
+    class Platform {
+        constructor(x, y, width, height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+        }
+
+        draw() {
+            const displayX = this.x - gameState.worldOffset;
+            if (displayX + this.width < 0 || displayX > canvas.width) return;
+
+            const topColor = varToString('--platform-top-color');
+            const sideColor = varToString('--platform-side-color');
+
+            // Draw the side/depth effect (dirt/brown)
+            ctx.fillStyle = sideColor;
+            ctx.fillRect(displayX, this.y + 8, this.width, this.height - 8);
+
+            // Draw the top surface (grass with a subtle texture/variation)
+            ctx.fillStyle = topColor;
+            ctx.fillRect(displayX, this.y, this.width, 10);
+
+            // Add some "grass tufts" for detail on top
+            ctx.fillStyle = '#4a903c'; // Darker green for tufts
+            for (let i = 0; i < this.width; i += 8 + Math.random() * 5) {
+                ctx.beginPath();
+                ctx.moveTo(displayX + i, this.y + 10);
+                ctx.lineTo(displayX + i + 3, this.y + 5);
+                ctx.lineTo(displayX + i + 6, this.y + 10);
+                ctx.fill();
+            }
+
+            // Outline for a cleaner look
+            ctx.strokeStyle = '#4A322B'; // Darker brown
+            ctx.lineWidth = 2;
+            ctx.strokeRect(displayX, this.y, this.width, this.height);
+            ctx.lineWidth = 1; // Reset
+        }
+    }
+
+    class Item {
+        constructor(x, y, type) {
+            this.x = x;
+            this.y = y;
+            this.type = type; // 'ball', 'kibble', 'steak'
+            this.width = 16;
+            this.height = 16;
+            this.collected = false;
+        }
+
+        draw() {
+            if (this.collected) return;
+            const displayX = this.x - gameState.worldOffset;
+            if (displayX + this.width < 0 || displayX > canvas.width) return;
+
+            ctx.save();
+            ctx.translate(displayX + this.width / 2, this.y + this.height / 2); // Center for rotation/scaling
+            const scale = 1 + Math.sin(Date.now() / 200) * 0.1; // Gentle bobbing/pulsing animation
+            ctx.scale(scale, scale);
+
+            if (this.type === 'ball') {
+                // Tennis Ball (Green Circle with white lines and subtle shadow)
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetY = 2;
+
+                ctx.fillStyle = varToString('--ball-color');
+                ctx.beginPath();
+                ctx.arc(0, 0, this.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = varToString('--ball-line-color');
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.width / 2 - 1, Math.PI * 0.75, Math.PI * 0.25);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, this.width / 2 - 1, Math.PI * 1.75, Math.PI * 1.25);
+                ctx.stroke();
+                ctx.lineWidth = 1;
+
+            } else if (this.type === 'kibble') {
+                // Kibble (More organic, less angular)
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetY = 2;
+
+                ctx.fillStyle = varToString('--kibble-color');
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.width * 0.45, this.height * 0.4, Math.PI / 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Shine
+                ctx.fillStyle = varToString('--kibble-shine-color');
+                ctx.beginPath();
+                ctx.moveTo(this.width * 0.1, -this.height * 0.2);
+                ctx.lineTo(this.width * 0.2, -this.height * 0.3);
+                ctx.lineTo(this.width * 0.3, -this.height * 0.2);
+                ctx.fill();
+
+            } else if (this.type === 'steak') {
+                // Steak (More detailed and "meaty")
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetY = 2;
+
+                // Meat part
+                ctx.fillStyle = varToString('--steak-meat-color');
+                ctx.beginPath();
+                ctx.moveTo(-this.width * 0.4, 0);
+                ctx.bezierCurveTo(-this.width * 0.4, -this.height * 0.4, this.width * 0.3, -this.height * 0.4, this.width * 0.5, -this.height * 0.1);
+                ctx.bezierCurveTo(this.width * 0.3, this.height * 0.4, -this.width * 0.4, this.height * 0.4, -this.width * 0.4, 0);
+                ctx.fill();
+
+                // Bone part
+                ctx.fillStyle = varToString('--steak-bone-color');
+                ctx.beginPath();
+                ctx.ellipse(this.width * 0.35, -this.height * 0.25, this.width * 0.15, this.height * 0.15, Math.PI / 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(this.width * 0.35, this.height * 0.25, this.width * 0.15, this.height * 0.15, -Math.PI / 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Bone connector
+                ctx.fillRect(this.width * 0.25, -this.height * 0.2, this.width * 0.2, this.height * 0.4);
+            }
+            ctx.restore(); // Restore canvas state to clear transformations and shadows
+        }
+    }
+
+    class Enemy {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 30;
+            this.height = 30;
+            this.velX = 1.5;
+            this.alive = true;
+            this.initialX = x; // For patrol boundaries
+            this.facingRight = true; // For drawing direction
+        }
+
+        update(platforms) {
+            if (!this.alive) return;
+
+            // Update facing direction based on movement
+            if (this.velX > 0) this.facingRight = true;
+            else if (this.velX < 0) this.facingRight = false;
+
+            // Simple movement and boundary check
+            this.x += this.velX;
+
+            // Get the platform directly below the enemy's next position
+            const nextX = this.x + this.velX;
+            const groundY = this.y + this.height;
+
+            let foundPlatform = false;
+            for (const p of platforms) {
+                 // Check if the enemy's feet (groundY) are on or slightly below the platform's top
+                if (p.x <= nextX && p.x + p.width >= nextX + this.width && p.y >= groundY - 2 && p.y <= groundY + 2) {
+                    foundPlatform = true;
+                    break;
+                }
+            }
+
+            // Reverse direction if hitting an edge or falling off a platform (simplified)
+            // or if no platform is found ahead, reverse direction
+            if (!foundPlatform || Math.abs(this.x - this.initialX) > 200) { // Patrol range of 200 units
+                 this.velX *= -1;
+                 this.initialX = this.x; // Reset initialX after reversing for next patrol
+            }
+        }
+
+        draw() {
+            if (!this.alive) return;
+            const displayX = this.x - gameState.worldOffset;
+            if (displayX + this.width < 0 || displayX > canvas.width) return;
+
+            const catBodyColor = varToString('--cat-body-color');
+            const catFaceColor = varToString('--cat-face-color');
+
+            ctx.save();
+            if (!this.facingRight) {
+                ctx.scale(-1, 1);
+                ctx.translate(-(displayX + this.width), this.y);
+            } else {
+                ctx.translate(displayX, this.y);
+            }
+
+            ctx.strokeStyle = varToString('--cat-face-color');
+            ctx.lineWidth = 2;
+
+            // Body
+            ctx.fillStyle = catBodyColor;
+            ctx.beginPath();
+            ctx.ellipse(this.width / 2, this.height * 0.7, this.width * 0.4, this.height * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Head
+            ctx.fillStyle = catBodyColor;
+            ctx.beginPath();
+            ctx.ellipse(this.width / 2, this.height * 0.35, this.width * 0.35, this.height * 0.25, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Ears
+            ctx.fillStyle = catBodyColor;
+            ctx.beginPath();
+            ctx.moveTo(this.width * 0.2, this.height * 0.2);
+            ctx.lineTo(this.width * 0.3, this.height * 0.05);
+            ctx.lineTo(this.width * 0.4, this.height * 0.2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(this.width * 0.6, this.height * 0.2);
+            ctx.lineTo(this.width * 0.7, this.height * 0.05);
+            ctx.lineTo(this.width * 0.8, this.height * 0.2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Face details (grumpy eyes, nose)
+            ctx.fillStyle = catFaceColor;
+            ctx.beginPath(); // Left eye
+            ctx.arc(this.width * 0.35, this.height * 0.3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath(); // Right eye
+            ctx.arc(this.width * 0.65, this.height * 0.3, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Grumpy eyebrows (darker color, angled)
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(this.width * 0.3, this.height * 0.25);
+            ctx.lineTo(this.width * 0.4, this.height * 0.25);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(this.width * 0.6, this.height * 0.25);
+            ctx.lineTo(this.width * 0.7, this.height * 0.25);
+            ctx.stroke();
+
+            // Nose
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.moveTo(this.width / 2, this.height * 0.4);
+            ctx.lineTo(this.width / 2 - 3, this.height * 0.45);
+            ctx.lineTo(this.width / 2 + 3, this.height * 0.45);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+            ctx.lineWidth = 1; // Reset
+        }
+    }
+
+    class Cloud {
+        constructor(x, y, width, height, speed) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.speed = speed;
+        }
+
+        update() {
+            this.x -= this.speed;
+            if (this.x + this.width < 0) {
+                this.x = canvas.width + Math.random() * 200; // Reset off-screen to the right
+                this.y = Math.random() * (canvas.height / 2 - 50); // Random Y in upper half
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = varToString('--cloud-color');
+            ctx.beginPath();
+            // Main body of the cloud
+            ctx.arc(this.x, this.y, this.width * 0.3, 0, Math.PI * 2);
+            ctx.arc(this.x + this.width * 0.4, this.y - this.height * 0.2, this.width * 0.35, 0, Math.PI * 2);
+            ctx.arc(this.x + this.width * 0.7, this.y + this.height * 0.1, this.width * 0.3, 0, Math.PI * 2);
+            ctx.arc(this.x + this.width * 0.3, this.y + this.height * 0.3, this.width * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+
+    // --- Game World Data ---
+    let corgi;
+    let platforms = [];
+    let items = [];
+    let enemies = [];
+
+    function setupWorld() {
+        platforms = [];
+        items = [];
+        enemies = [];
+        gameState.worldOffset = 0;
+        gameState.score = 0;
+        gameState.timeRemaining = gameState.timeLimit;
+
+        // Generate clouds
+        gameState.clouds = [];
+        for (let i = 0; i < 5; i++) {
+            gameState.clouds.push(new Cloud(
+                Math.random() * canvas.width,
+                Math.random() * (canvas.height / 2 - 50),
+                50 + Math.random() * 70,
+                30 + Math.random() * 40,
+                0.2 + Math.random() * 0.3
+            ));
+        }
+
+
+        // Platform: Ground Level (covers the entire bottom of the screen)
+        platforms.push(new Platform(0, canvas.height - 20, 3000, 20));
+
+        // Platform: Starting platform (extra long)
+        platforms.push(new Platform(0, canvas.height - 20, 200, 20));
+
+        // Platforms (x, y, width, height)
+        platforms.push(new Platform(250, canvas.height - 80, 100, 20));
+        platforms.push(new Platform(450, canvas.height - 140, 150, 20));
+        platforms.push(new Platform(700, canvas.height - 100, 50, 20));
+        platforms.push(new Platform(800, canvas.height - 200, 100, 20));
+        platforms.push(new Platform(1000, canvas.height - 250, 200, 20));
+        platforms.push(new Platform(1300, canvas.height - 150, 100, 20));
+        platforms.push(new Platform(1600, canvas.height - 80, 50, 20));
+        platforms.push(new Platform(1800, canvas.height - 200, 300, 20));
+        platforms.push(new Platform(2300, canvas.height - 200, 50, 20));
+        platforms.push(new Platform(2500, canvas.height - 100, 200, 20));
+
+        // Items (x, y, type)
+        // Tennis Balls (Score)
+        items.push(new Item(100, canvas.height - 50, 'ball'));
+        items.push(new Item(270, canvas.height - 110, 'ball'));
+        items.push(new Item(490, canvas.height - 170, 'ball'));
+        items.push(new Item(510, canvas.height - 170, 'ball'));
+        items.push(new Item(710, canvas.height - 130, 'ball'));
+        items.push(new Item(820, canvas.height - 230, 'ball'));
+        items.push(new Item(1050, canvas.height - 280, 'ball'));
+        items.push(new Item(1080, canvas.height - 280, 'ball'));
+        items.push(new Item(1350, canvas.height - 180, 'ball'));
+
+        // Kibble (Mushroom/Grow)
+        items.push(new Item(300, canvas.height - 110, 'kibble'));
+        items.push(new Item(1050, canvas.height - 200, 'kibble'));
+
+        // Steak (Star/Invincibility)
+        items.push(new Item(600, canvas.height - 250, 'steak'));
+        items.push(new Item(1950, canvas.height - 230, 'steak'));
+
+        // Enemies (x, y) - Grumpy Cat
+        enemies.push(new Enemy(500, canvas.height - 170 - 30));
+        enemies.push(new Enemy(1100, canvas.height - 280 - 30));
+        enemies.push(new Enemy(2000, canvas.height - 230 - 30));
+
+        // Final goal marker
+        platforms.push(new Platform(2800, canvas.height - 200, 20, 180));
+    }
+
+    function init() {
+        // Initialize corgi with adjusted height to stand on platforms correctly
+        corgi = new Corgi(50, canvas.height - 20 - corgi.LITTLE_HEIGHT);
+        setupWorld();
+        gameState.gameRunning = true;
+        showMessage("Corgi Adventure! Get the Steak!", 180);
+        window.requestAnimationFrame(gameLoop);
+    }
+
+    // --- Game Logic ---
+
+    function updateGame(deltaTime) {
+        if (!gameState.gameRunning) return;
+
+        // Decrease timer
+        gameState.timeRemaining -= deltaTime / 1000;
+        if (gameState.timeRemaining <= 0) {
+            gameOver();
+            return;
+        }
+
+
+        // 1. Update Corgi
+        corgi.update();
+
+        // 2. Update Enemies
+        enemies.forEach(e => e.update(platforms));
+
+        // 3. Handle Corgi-Platform Collision
+        let lastOnGround = corgi.onGround;
+        corgi.onGround = false;
+
+        for (const p of platforms) {
+            if (checkCollision(corgi, p)) {
+                // Determine collision direction
+                const hitBottom = corgi.y + corgi.height < p.y + p.height && corgi.y + corgi.height > p.y;
+                // const hitTop = corgi.y > p.y && corgi.y < p.y + p.height; // Not strictly needed
+
+                if (hitBottom && corgi.velY >= 0) {
+                    // Corgi's head hits a block from below (can still happen if big)
+                    // (Silent version)
+                }
+
+                if (corgi.velY > 0 && corgi.y + corgi.height <= p.y + corgi.velY + 1) {
+                    // Landed on top of a platform
+                    corgi.y = p.y - corgi.height;
+                    corgi.velY = 0;
+                    corgi.onGround = true;
+                } else if (corgi.velY < 0 && corgi.y < p.y + p.height && corgi.y + corgi.height > p.y) {
+                    // Hitting a platform from below
+                    corgi.velY = 0;
+                    corgi.y = p.y + p.height;
+                } else if (corgi.velX !== 0) {
+                    // Horizontal collision (simple stop)
+                    if (corgi.x < p.x) {
+                        corgi.x = p.x - corgi.width;
+                    } else {
+                        corgi.x = p.x + p.width;
+                    }
+                }
+            }
+        }
+
+        // 4. Handle Item Collection
+        items.forEach(item => {
+            if (!item.collected && checkCollision(corgi, item)) {
+                item.collected = true;
+
+                if (item.type === 'ball') {
+                    gameState.score += 10;
+                    showMessage("+10 Tennis Balls!");
+                } else if (item.type === 'kib
