@@ -21,6 +21,7 @@
             position: absolute;
             top: 0;
             left: 0;
+            cursor: crosshair; /* Indicate it's interactive */
         }
         #uiOverlay {
             position: absolute;
@@ -37,9 +38,9 @@
 
     <div id="uiOverlay" class="text-white">
         <h1 class="text-4xl font-extrabold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-red-500">
-            Click Fireworks Multi 
+            Follow Firework
         </h1>
-        <p class="text-sm md:text-base text-gray-300 font-medium">Click or tap anywhere to launch fireworks!</p>
+        <p class="text-sm md:text-base text-gray-300 font-medium">Hold down the mouse button or tap and drag to unleash a continuous show!</p>
     </div>
 
     <script>
@@ -51,6 +52,14 @@
         let fireworks = [];
         let particles = [];
         const GRAVITY = 0.05; // Gravity effect on particles
+        
+        // --- Continuous Firing Variables ---
+        let isFiring = false;
+        let pointerTargetX = 0;
+        let pointerTargetY = 0;
+        const FIRE_RATE_MS = 900; // Delay between launches when holding down the button (Increased from 150 to 300ms)
+        let lastLaunchTime = 0;
+        // -----------------------------------
 
         function randomColor() {
             // Random hue (0-360), fixed saturation (70-90), and increased lightness (60-70) for vividness
@@ -61,13 +70,19 @@
         }
 
         class Particle {
-            // Added two new optional parameters for sub-explosions
-            constructor(x, y, color, angle, speed, shouldSubExplode = false, isSubParticle = false) {
+            constructor(x, y, color, angle, speed, shouldSubExplode = false, isSubParticle = false, isBackground = false) {
                 this.x = x;
                 this.y = y;
                 this.color = color;
-                // INCREASED SIZE: Sub-particles are now 1-2.5px, main particles are 2-5px
-                this.radius = isSubParticle ? (Math.random() * 1.5 + 1) : (Math.random() * 3 + 2); 
+                
+                // Adjust size based on type
+                if (isBackground) {
+                    this.radius = Math.random() * 1 + 0.5; // Very small for background
+                } else if (isSubParticle) {
+                    this.radius = Math.random() * 1.5 + 1; // Sub-particles are 1-2.5px
+                } else {
+                    this.radius = Math.random() * 3 + 2; // Main particles are 2-5px
+                }
 
                 // Velocity based on angle and speed
                 this.velocity = {
@@ -78,10 +93,19 @@
                 this.alpha = 1; // Initial opacity
                 this.friction = 0.99; // Air resistance
                 
-                // ADJUSTED FADE: Sub-particles now have a longer timeToLive (120 frames)
-                this.timeToLive = isSubParticle ? 120 : 100; 
+                // Adjust fade rate based on type
+                if (isBackground) {
+                    this.timeToLive = 60; // Background particles fade faster
+                    this.fadeRate = 0.02;
+                } else if (isSubParticle) {
+                    this.timeToLive = 120; // Sub-particles have a longer fade out
+                    this.fadeRate = 0.008; // Slower fade for sub-particles
+                } else {
+                    this.timeToLive = 100; // Main particles fade at a normal rate
+                    this.fadeRate = 0.01; 
+                }
                 
-                // Sub-explosion properties
+                // Sub-explosion properties: Both background and foreground can now sub-explode
                 this.shouldSubExplode = shouldSubExplode;
                 this.subExplosionTrigger = isSubParticle ? -1 : Math.random() * 30 + 30; // Trigger between 30-60 frames
                 this.exploded = false;
@@ -107,30 +131,22 @@
                 const subCount = Math.floor(Math.random() * 10) + 5; // 5 to 15 sub-particles
                 for (let i = 0; i < subCount; i++) {
                     const angle = Math.random() * Math.PI * 2;
-                    // Sub-particles get a smaller, faster initial kick
                     const speed = Math.random() * 1.5 + 0.5; 
-
-                    // Create new particles, marked as sub-particles (last argument true)
                     particles.push(new Particle(this.x, this.y, this.color, angle, speed, false, true));
                 }
             }
 
             // Update position and alpha
             update() {
-                // Apply friction to slow down horizontal movement
                 this.velocity.x *= this.friction;
-                // Apply gravity to vertical movement
                 this.velocity.y += GRAVITY;
 
-                // Update position
                 this.x += this.velocity.x;
                 this.y += this.velocity.y;
 
-                // Fade out (decrease alpha) 
-                this.alpha -= 0.01; 
+                this.alpha -= this.fadeRate; 
                 this.timeToLive--;
 
-                // Check for sub-explosion trigger
                 if (this.shouldSubExplode && !this.exploded && this.timeToLive <= this.subExplosionTrigger) {
                     this.subExplode();
                 }
@@ -138,27 +154,35 @@
         }
 
         class Firework {
-            constructor(startX, startY, endX, endY) {
+            constructor(startX, startY, endX, endY, isBackground = false) {
                 this.x = startX;
                 this.y = startY;
                 this.targetX = endX;
                 this.targetY = endY;
                 this.color = randomColor();
-                // BOOSTED SPEED: Rocket speed increased from (2-5) to (6-10)
-                this.speed = Math.random() * 4 + 6; 
+                this.isBackground = isBackground; // Flag to determine particle size/fade
+                
+                // Adjust speed and trail based on type
+                if (isBackground) {
+                    this.speed = Math.random() * 3 + 3; // Slower for background (3-6)
+                    this.trailLength = 5;
+                    this.lineWidth = 1;
+                } else {
+                    this.speed = Math.random() * 4 + 6; // Normal speed (6-10)
+                    this.trailLength = 10;
+                    this.lineWidth = 2;
+                }
+                
                 this.exploded = false;
-                this.trail = [{ x: startX, y: startY }]; // For the trail effect
+                this.trail = [{ x: startX, y: startY }]; 
 
-                // Calculate the distance and velocity needed to reach the target
                 const dx = endX - startX;
                 const dy = endY - startY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                // Handle division by zero if target is exactly on start point (should be blocked by launchFirework check, but for safety)
                 if (distance === 0) {
                     this.velocity = { x: 0, y: 0 };
                 } else {
-                    // Normalize velocity
                     this.velocity = {
                         x: (dx / distance) * this.speed,
                         y: (dy / distance) * this.speed
@@ -168,37 +192,33 @@
 
             // Launch the particle explosion
             explode() {
-                const count = Math.floor(Math.random() * 50) + 80; // 80 to 130 particles
+                // Adjust particle count and properties based on type
+                const count = this.isBackground ? (Math.floor(Math.random() * 20) + 30) : (Math.floor(Math.random() * 50) + 80); // 30-50 for background, 80-130 for foreground
                 for (let i = 0; i < count; i++) {
-                    const angle = Math.random() * Math.PI * 2; // Full 360 degrees
-                    const speed = Math.random() * 4 + 1; // Explosion speed
+                    const angle = Math.random() * Math.PI * 2; 
+                    const speed = this.isBackground ? (Math.random() * 2 + 0.5) : (Math.random() * 4 + 1); // Slower for background
 
-                    // 15% chance for a particle to be an "exploding payload"
-                    const shouldSubExplode = Math.random() < 0.15;
+                    // Multi-stage enabled for ALL fireworks (both foreground and background)
+                    const shouldSubExplode = (Math.random() < 0.15);
 
-                    // Use the firework's color for the particles, passing the shouldSubExplode flag
-                    particles.push(new Particle(this.x, this.y, this.color, angle, speed, shouldSubExplode));
+                    // Pass the isBackground flag to particles to handle size/fade
+                    particles.push(new Particle(this.x, this.y, this.color, angle, speed, shouldSubExplode, false, this.isBackground));
                 }
                 this.exploded = true;
             }
 
             // Draw the rocket (a simple dot) and its trail
             draw() {
-                // Draw rocket body
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2, false);
+                ctx.arc(this.x, this.y, this.lineWidth, 0, Math.PI * 2, false); // Radius tied to line width
                 ctx.fill();
 
-                // Draw trail (simple line behind the rocket)
                 ctx.strokeStyle = this.color;
-                ctx.lineWidth = 2; // Increased line width for visibility
+                ctx.lineWidth = this.lineWidth;
                 ctx.beginPath();
-                // Start from the current rocket position
                 ctx.moveTo(this.x, this.y);
-                // Draw back through the last few trail points
-                // INCREASED TRAIL LENGTH from 5 to 10
-                for (let i = 0; i < Math.min(this.trail.length, 10); i++) {
+                for (let i = 0; i < Math.min(this.trail.length, this.trailLength); i++) {
                     ctx.lineTo(this.trail[i].x, this.trail[i].y);
                 }
                 ctx.stroke();
@@ -207,19 +227,14 @@
             // Update rocket position
             update() {
                 if (!this.exploded) {
-                    // Update position
                     this.x += this.velocity.x;
                     this.y += this.velocity.y;
 
-                    // Add current position to trail
                     this.trail.unshift({ x: this.x, y: this.y });
-                    // Keep trail short
-                    if (this.trail.length > 10) { // Keep consistent with draw
+                    if (this.trail.length > this.trailLength) {
                         this.trail.pop();
                     }
 
-                    // Check if it has passed the target point (peak height)
-                    // Since fireworks launch upwards (y decreases), we check if current y is less than or equal to target y.
                     if (this.velocity.y < 0 && this.y <= this.targetY) {
                         this.explode();
                     } else if (this.velocity.y > 0 && this.y >= this.targetY) {
@@ -236,6 +251,9 @@
             ctx.fillStyle = 'rgba(0, 0, 10, 0.05)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Trigger continuous launch if firing
+            continuousLaunch();
+
             // Update and draw fireworks (rockets)
             for (let i = fireworks.length - 1; i >= 0; i--) {
                 const fw = fireworks[i];
@@ -248,26 +266,19 @@
             }
 
             // Update and draw particles
-            let activeParticlesExist = false;
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
                 p.update();
                 p.draw();
 
-                // Check if the particle should be removed
                 const isFaded = (p.alpha <= 0 || p.timeToLive <= 0);
-                // Particles that are marked to sub-explode should only be removed after they explode
                 const isDone = (isFaded && (p.exploded || !p.shouldSubExplode));
 
                 if (isDone) {
                     particles.splice(i, 1);
-                } else {
-                    activeParticlesExist = true; // Keep animating if any particle is still alive
                 }
             }
-
         }
-
 
         function setupCanvas() {
             canvas.width = window.innerWidth;
@@ -279,62 +290,102 @@
         // Adjust canvas size on window resize
         window.addEventListener('resize', setupCanvas);
 
-
-        function launchFirework(event) {
-            // Determine if there are touch points present
-            const hasTouches = event.touches && event.touches.length > 0;
-            
-            // Prevent scrolling on touch
-            if (event.type.startsWith('touch')) {
-                event.preventDefault();
-            }
-
-            // Use ternary operator to safely get coordinates from touches if available, 
-            // otherwise fall back to standard clientX/clientY for mouse events.
-            const clientX = hasTouches ? event.touches[0].clientX : event.clientX;
-            const clientY = hasTouches ? event.touches[0].clientY : event.clientY;
-
-            // Set the explosion target point (where the user clicked/tapped)
-            const endX = clientX;
-            const endY = clientY;
-
-            // Only launch if the target is in the upper 90% of the screen
+        function handleLaunch(endX, endY, isInteractive) {
             if (endY < canvas.height * 0.9) {
-                // Determine if it's a multi-shot (approx 30% chance)
                 const isMultiShot = Math.random() < 0.3;
+                const isBackground = !isInteractive; // Background logic is inverse of interactive
 
                 if (isMultiShot) {
-                    // Multi-shot: Launch several fireworks from nearby random positions
-                    const numFireworks = Math.floor(Math.random() * 3) + 2; // 2 to 4 fireworks
+                    const numFireworks = Math.floor(Math.random() * 3) + 2;
                     for (let i = 0; i < numFireworks; i++) {
-                        // Random start X near the center of the screen
                         const startX = Math.random() * canvas.width; 
                         const startY = canvas.height;
+                        const targetYOffset = (Math.random() * 100) - 50; 
+                        const variedTargetY = Math.max(0, endY + targetYOffset); 
 
-                        // Slight variation in target Y for multi-shot
-                        const targetYOffset = (Math.random() * 100) - 50; // -50 to +50 pixels
-                        const variedTargetY = Math.max(0, endY + targetYOffset); // Ensure target doesn't go above screen
-
-                        fireworks.push(new Firework(startX, startY, endX, variedTargetY));
+                        fireworks.push(new Firework(startX, startY, endX, variedTargetY, isBackground)); 
                     }
                 } else {
-                    // Single shot: Launch one firework from a random bottom position
-                    const startX = Math.random() * canvas.width; // Random X along the bottom
+                    const startX = Math.random() * canvas.width; 
                     const startY = canvas.height;
-                    fireworks.push(new Firework(startX, startY, endX, endY));
+                    fireworks.push(new Firework(startX, startY, endX, endY, isBackground)); 
                 }
             }
         }
 
-        // Add event listeners for both mouse and touch
-        canvas.addEventListener('mousedown', launchFirework);
-        canvas.addEventListener('touchstart', launchFirework);
+        function handlePointerDown(event) {
+            const hasTouches = event.touches && event.touches.length > 0;
+            if (event.type.startsWith('touch')) {
+                event.preventDefault();
+            }
 
-        // Start the animation loop
+            const clientX = hasTouches ? event.touches[0].clientX : event.clientX;
+            const clientY = hasTouches ? event.touches[0].clientY : event.clientY;
+
+            pointerTargetX = clientX;
+            pointerTargetY = clientY;
+            isFiring = true;
+        }
+
+        function handlePointerMove(event) {
+            const hasTouches = event.touches && event.touches.length > 0;
+            
+            // Only prevent default on touchmove
+            if (event.type.startsWith('touch')) {
+                event.preventDefault();
+            }
+
+            const clientX = hasTouches ? event.touches[0].clientX : event.clientX;
+            const clientY = hasTouches ? event.touches[0].clientY : event.clientY;
+
+            pointerTargetX = clientX;
+            pointerTargetY = clientY;
+        }
+
+        function handlePointerUp() {
+            isFiring = false;
+        }
+
+        function continuousLaunch() {
+            const currentTime = Date.now();
+            
+            if (isFiring && (currentTime - lastLaunchTime > FIRE_RATE_MS)) {
+                // Launch interactive fireworks towards the current pointer target
+                handleLaunch(pointerTargetX, pointerTargetY, true); 
+                lastLaunchTime = currentTime;
+            }
+        }
+        
+        function autoLaunchFirework() {
+            // Random target in upper 10-60% of screen (lower than interactive)
+            const endY = Math.random() * (canvas.height * 0.5) + (canvas.height * 0.1); 
+            const endX = Math.random() * canvas.width;
+
+            // Mark as NOT interactive (isInteractive is false, so isBackground is true)
+            handleLaunch(endX, endY, false);
+        }
+
+
+        // Add interactive event listeners
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('touchstart', handlePointerDown);
+        
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('touchmove', handlePointerMove);
+        
+        window.addEventListener('mouseup', handlePointerUp);
+        window.addEventListener('touchend', handlePointerUp);
+        window.addEventListener('mouseleave', handlePointerUp);
+
+
+        // Start the animation loop and auto-launch interval
         window.onload = function() {
-            // CRITICAL: Ensure canvas size is set when the window has fully loaded
             setupCanvas();
             animate();
+            // Start auto-launching background fireworks at random intervals (1 to 3 seconds)
+            setInterval(() => {
+                autoLaunchFirework();
+            }, Math.random() * 2000 + 1000); // Between 1 and 3 seconds
         };
 
     </script>
